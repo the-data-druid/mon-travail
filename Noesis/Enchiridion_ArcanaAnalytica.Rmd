@@ -1,0 +1,161 @@
+---
+title: "***Enchiridion::**ArcanaAnalytica()*" 
+subtitle: "*a **Data Druid** Technical Cookbook*"
+author: "jakeweber.io"
+output:
+  html_document:
+    theme: 
+      bootswatch: "morph"
+      version: 5
+    highlight: kate
+    toc: true
+    toc_float:
+      collapsed: false
+      smooth_scroll: true
+    toc_depth: 3
+    code_folding: hide
+    number_sections: true
+---
+```{r SET UP, message=FALSE, warning=FALSE, include=FALSE}
+knitr::opts_chunk$set(
+	echo = TRUE,
+	message = TRUE,
+	warning = TRUE
+	)
+options(scipen = 999)
+
+thematic::thematic_rmd()
+```
+
+# Introduction
+
+## Objective
+
+## Initializing Code
+
+### Packages Ecosystem
+
+
+```{r PACKAGES, message=FALSE, warning=FALSE}
+# WORKHORSES ----
+library(tidyverse) #all-around workhorse; initiates necessary packages
+library(tidyquant) #business science university workhorse
+
+# READING & WRITING ----
+library(readr) #importing the data (.csv)
+library(readxl) #importing the data (.xlsx)
+library(writexl) #exporting the data
+library(spotifyr) #access to spotify data
+
+# MANIPULATION & TRANSFORMATION ----
+library(dplyr) #data transformation and feature engineering
+library(lubridate) #date manipulation
+library(forcats) #factor manipulation (e.g.: data with categories)
+library(stringr) #string manipulation
+library(reshape2) #reshaping the data
+
+# ARTICULATION & VISUALIZATION ----
+library(kableExtra) #polished tables
+library(DT) #interactive tables
+library(plotly) #interactive visualizations
+library(ggrepel) #label formatting
+library(scales) #label formatting
+library(hrbrthemes) #visualization themes
+library(viridis) #visualization colors
+library(dbplyr) #SQL query articulation
+
+# MISCELLANEOUS ----
+library(RSQLite)
+
+# GRAVEYARD ----
+# library(glue)
+# library(ggridges)
+# library(ggstatsplot)
+# library(ggdist)
+# library(ggforce)
+# library(GGally)
+# library(ggiraph)
+```
+
+### Custom Functions
+
+```{r FUNCTIONS, message=FALSE, warning=FALSE}
+
+# ARTICULATION ----
+
+# A function that articulates data via polished tables. Use this for summaries and smaller sets of data to articulate.
+tablekable <- function(data) {
+     data %>% kbl(align = "l", format.args = list(big.mark = ",")) %>%
+        kable_styling(full_width = F, position = "left",
+                      bootstrap_options = c("hover", "striped", 
+                                            "condensed", "responsive"))}
+
+ # A function that articulates larger data sets into a polished, interactive, query-able table.
+tabledata <- function(data) {
+    data %>% datatable(filter = "bottom", style = "bootstrap5",
+          options = list(columnDefs = list(list(
+              className = 'dt-center', targets = 0:4))))}
+
+# A function that articulates a sample of the data in the tabledata() style.
+slicedt <- function(data) {
+    data %>% slice(1, nrow(.), 
+                   floor(nrow(.) * 0.2), floor(nrow(.) * 0.4),
+                   floor(nrow(.) * 0.6), floor(nrow(.) * 0.8)) %>% tablekable()}
+
+# VISUALIZATION ----
+
+# A function that provides light formatting for visualizations.
+viz_staples <- function(data) {
+    data %>% 
+        theme_ipsum() +
+        theme(legend.position = "bottom",
+              plot.margin = margin(.5, .5, .5, .5, "in"))} 
+
+# A function that provides interactivity with visualizations.
+viz_plotly <- function(data) {
+    data %>% plotly::ggplotly(tooltip = "text", dynamicTicks = T)
+#PS. "Text" comes from:
+    # ggplot(aes(x = sale_week,y = total_spend,fill = total_spend,
+    #         text = str_glue("Date: {sale_week}
+    #                          Revenue: {scales::dollar(total_spend)}")))
+} 
+
+# MISCELLANEOUS ----
+
+## A function that will detect and describe the presence of NULLs or NAs in your data
+detect_na <- function(data) {
+#part 1: summarize
+fdat1 <- data %>% summarise_all(~ sum(!is.na(.))) #Count of Non-NULLs
+fdat2 <- data %>% summarise_all(~ sum(is.na(.))) #Count of NULLs
+fdat3 <- data %>% summarise_all(~ sum(is.na(.)) / length(.)) #Percent of data NULL
+#part 2: name
+fdat1_2 <-  fdat1 %>% pivot_longer(everything(), names_to = "column_names", values_to = "non_NULL")
+fdat2_2 <- fdat2 %>% pivot_longer(everything(), names_to = "column_names", values_to = "NULL")
+fdat3_2 <- fdat3 %>% pivot_longer(everything(), names_to = "column_names", values_to = "percent_NULL")
+#part 3: join
+fdat1_2 %>% left_join(fdat2_2, by = c("column_names")) %>% 
+    left_join(fdat3_2, by = c("column_names")) %>% 
+    arrange(desc(percent_NULL)) %>% 
+# part 4: articulate
+    tablekable()} 
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -1,0 +1,342 @@
+---
+title: "***Atelier Acoustique** (No. 1)*" 
+subtitle: "***Emily Axford's Melodious Madness***"
+author: "jakeweber.io"
+output:
+  html_document:
+    theme: 
+      bootswatch: "vapor"
+      version: 5
+    highlight: kate
+    toc: true
+    toc_float:
+      collapsed: false
+      smooth_scroll: true
+    toc_depth: 3
+    code_folding: hide
+    number_sections: true
+---
+```{r SET UP, message=FALSE, warning=FALSE, include=FALSE}
+knitr::opts_chunk$set(
+	echo = TRUE,
+	message = TRUE,
+	warning = TRUE
+	)
+options(scipen = 999)
+
+thematic::thematic_rmd()
+```
+
+# Introduction
+
+## Objective
+Familiarizing myself with the Spotify API through one of my favorite Dungeons & Dragons luminaries, Emily Axford. In this analysis, I will use Spotify data to understand the musical nature of their music. Their three albums contain a total of 86 songs that were developed in tandem with "Not Another D&D Podcast" as Emily is the NADDPOD Bard.
+
+## Spotify Data Glossary
+The song attributes in the data set are explained below:
+*(Note: not all variabels will be used in this version of the analysis)*
+
+  1. **Tempo**: The tempo of the song. The overall estimated tempo of a track in beats per minute (BPM). In musical terminology, the tempo is the speed or pace of a given piece and derives directly from the average beat duration.
+
+  2. **Energy**: Energy is a measure from 0.0 to 1.0 and represents a perceptual measure of intensity and activity. Typically, energetic tracks feel fast, loud, and noisy. Higher the value more energetic the song.
+
+  3. **Danceability**: Danceability describes how suitable a track is for dancing based on a combination of musical elements including tempo, rhythm stability, beat strength, and overall regularity. The value ranges from 0 to 1. Higher the value more suitable the song is for dancing.
+
+  4. **Loudness**: Loudness values are averaged across the entire track. It is the quality of a song. It ranges from -60 to 0 DB. Higher the value, the louder the song.
+
+  5. **Valence**: A measure from 0.0 to 1.0 describing the musical positiveness conveyed by a track. Tracks with high valence sound more positive (e.g. happy, cheerful, euphoric), while tracks with low valence sound more negative (e.g. sad, depressed, angry).
+
+  6. **Liveness**: Detects the presence of an audience in the recording. Higher liveness values represent an increased probability that the track was performed live. A value above 0.8 provides a strong likelihood that the track is live.
+
+  7. **Acousticness**: A confidence measure from 0.0 to 1.0 of whether the track is acoustic. 1.0 represents high confidence the track is acoustic.
+
+  8. **Speechiness**: Speechiness detects the presence of spoken words in a track. The more exclusively speech-like the recording (e.g. talk show, audiobook, poetry), the closer to 1.0 the attribute value. Values above 0.66 describe tracks that are probably made entirely of spoken words. Values between 0.33 and 0.66 describe tracks that may contain both music and speech, either in sections or layered, including such cases as rap music. Values below 0.33 most likely represent music and other non-speech-like tracks.
+
+  9. **Mode**: Songs can be classified as major and minor. 1.0 represents major mode and 0 represents minor.
+
+  10. **Key**: Key is the pitch, notes or scale of song that forms the basis of a song. 12 keys are ranging from 0 to 11.
+
+## Initializing Code
+### Packages Ecosystem
+
+```{r PACKAGES, message=FALSE, warning=FALSE}
+# WORKHORSES ----
+library(tidyverse) #all-around workhorse; initiates necessary packages
+library(tidyquant) #business science university workhorse
+
+# READING & WRITING ----
+library(readr) #importing the data (.csv)
+library(readxl) #importing the data (.xlsx)
+library(writexl) #exporting the data
+library(spotifyr) #access to spotify data
+
+# MANIPULATION & TRANSFORMATION ----
+library(dplyr) #data transformation and feature engineering
+library(lubridate) #date manipulation
+library(forcats) #factor manipulation (e.g.: data with categories)
+library(stringr) #string manipulation
+library(reshape2) #reshaping the data
+
+# ARTICULATION & VISUALIZATION ----
+library(kableExtra) #polished tables
+library(DT) #interactive tables
+library(plotly) #interactive visualizations
+library(ggrepel) #label formatting
+library(scales) #label formatting
+library(hrbrthemes) #visualization themes
+library(viridis) #visualization colors
+library(dbplyr) #SQL query articulation
+
+# MISCELLANEOUS ----
+library(RSQLite)
+
+# GRAVEYARD ----
+# library(glue)
+# library(ggridges)
+# library(ggstatsplot)
+# library(ggdist)
+# library(ggforce)
+# library(GGally)
+# library(ggiraph)
+```
+
+### Custom Functions
+
+```{r FUNCTIONS, message=FALSE, warning=FALSE}
+
+# ARTICULATION ----
+
+# A function that articulates data via polished tables. Use this for summaries and smaller sets of data to articulate.
+tablekable <- function(data) {
+     data %>% kbl(align = "l", format.args = list(big.mark = ",")) %>%
+        kable_styling(full_width = F, position = "left",
+                      bootstrap_options = c("hover", "striped", 
+                                            "condensed", "responsive"))}
+
+ # A function that articulates larger data sets into a polished, interactive, query-able table.
+tabledata <- function(data) {
+    data %>% datatable(filter = "bottom", style = "bootstrap5",
+          options = list(columnDefs = list(list(
+              className = 'dt-center', targets = 0:4))))}
+
+# A function that articulates a sample of the data in the tabledata() style.
+slicedt <- function(data) {
+    data %>% slice(1, nrow(.), 
+                   floor(nrow(.) * 0.2), floor(nrow(.) * 0.4),
+                   floor(nrow(.) * 0.6), floor(nrow(.) * 0.8)) %>% tablekable()}
+
+# VISUALIZATION ----
+
+# A function that provides light formatting for visualizations.
+viz_staples <- function(data) {
+    data %>% 
+        theme_ipsum() +
+        theme(legend.position = "bottom",
+              plot.margin = margin(.5, .5, .5, .5, "in"))} 
+
+# A function that provides interactivity with visualizations.
+viz_plotly <- function(data) {
+    data %>% plotly::ggplotly(tooltip = "text", dynamicTicks = T)
+#PS. "Text" comes from:
+    # ggplot(aes(x = sale_week,y = total_spend,fill = total_spend,
+    #         text = str_glue("Date: {sale_week}
+    #                          Revenue: {scales::dollar(total_spend)}")))
+} 
+
+# MISCELLANEOUS ----
+
+## A function that will detect and describe the presence of NULLs or NAs in your data
+detect_na <- function(data) {
+#part 1: summarize
+fdat1 <- data %>% summarise_all(~ sum(!is.na(.))) #Count of Non-NULLs
+fdat2 <- data %>% summarise_all(~ sum(is.na(.))) #Count of NULLs
+fdat3 <- data %>% summarise_all(~ sum(is.na(.)) / length(.)) #Percent of data NULL
+#part 2: name
+fdat1_2 <-  fdat1 %>% pivot_longer(everything(), names_to = "column_names", values_to = "non_NULL")
+fdat2_2 <- fdat2 %>% pivot_longer(everything(), names_to = "column_names", values_to = "NULL")
+fdat3_2 <- fdat3 %>% pivot_longer(everything(), names_to = "column_names", values_to = "percent_NULL")
+#part 3: join
+fdat1_2 %>% left_join(fdat2_2, by = c("column_names")) %>% 
+    left_join(fdat3_2, by = c("column_names")) %>% 
+    arrange(desc(percent_NULL)) %>% 
+# part 4: articulate
+    tablekable()} 
+
+```
+
+# Data Wrangling
+
+## Importing Data
+
+```{r IMPORT, message=FALSE, warning=FALSE}
+#initializing the spotifyR API connection
+Sys.setenv(SPOTIFY_CLIENT_ID = 'efa29a88493e4507836a0ac5f58623df')
+Sys.setenv(SPOTIFY_CLIENT_SECRET = 'bfe99c8e5ada4295b59a3cff2c70a1f3')
+
+access_token <- get_spotify_access_token()
+
+#reading in the spotify data for Emily Axford (sans non-NADDPOD album)
+dat_import_axford <- spotifyr::get_artist_audio_features("emily axford") %>%
+  #culling some columns and reording others
+  select(1,2,6,9:20,26:27,30,32,36:39) %>% 
+  select(18,1,20,19,3,4:14,21:23,16, 17, contains("id"), everything()) %>% 
+  #remove non-NADDPOD album
+  filter(album_name != 
+           "Doomsday Diaries: A Love Song for Any Apocalyptic Scenario")
+
+#glimpse of the import data
+glimpse(dat_import_axford)
+
+```
+
+## Tidying Up
+
+```{r TIDY DATA, message=FALSE, warning=FALSE}
+
+dat_axford_WIP1 <- dat_import_axford %>% 
+  #selecting the Columns to work with
+  select(track_name, album_name, 
+         album_release_date, track_number, duration_ms, 
+         tempo, energy, valence, 
+         acousticness, loudness, speechiness, instrumentalness)  %>% 
+  #arranging the data to set up factors
+  arrange(desc(album_release_date), album_name, track_number) %>% 
+  #setting the album + track factors
+  mutate( 
+    track_name = as_factor(track_name),
+    track_number = as_factor(track_number),
+    album_name = as_factor(album_name),
+    duration_sec = duration_ms / 1000,
+    duration_min = duration_sec / 60
+  ) %>% 
+  #reordering new columns
+  select(1:4, 
+         duration_min, duration_sec, duration_ms,
+         5:12) %>% 
+  #capitalizing columns
+  rename_with(toupper)
+
+#glimpse of the tidy'd data
+dat_axford_WIP1 %>% glimpse()
+
+```
+## Inspect NULLs
+```{r DETECT NA, message=FALSE, warning=FALSE}
+
+dat_axford_WIP1 %>% detect_na() 
+
+```
+
+
+## Normalizing Ranges
+
+```{r NTILE 7, message=FALSE, warning=FALSE}
+
+dat_rename_AF <- dat_axford_WIP1 %>% select(5:14) %>% 
+  setNames(paste0('OG.', names(.)))
+
+dat_axford_all <- dat_axford_WIP1 %>% 
+  select(1:4) %>% 
+  cbind(dat_rename_AF) %>% 
+  mutate(
+    song_length_v1 = ntile(OG.DURATION_MIN, 7),
+    tempo_v1 = ntile(OG.TEMPO, 7),
+    energy_v1 = ntile(OG.ENERGY, 7),
+    valence_v1 = ntile(OG.VALENCE, 7),
+    loudness_v1 = ntile(OG.LOUDNESS, 7),
+    speechiness_v1 = ntile(OG.SPEECHINESS, 7),
+    acousticness_v1 = ntile(OG.ACOUSTICNESS, 7),
+    instrumentalness_v1 = ntile(OG.INSTRUMENTALNESS, 7)) %>% 
+  select(1:4,15:22,everything())
+
+
+dat_axford_album <- dat_axford_WIP1 %>% 
+  select(1:4) %>% 
+  cbind(dat_rename_AF) %>% 
+  group_by(ALBUM_NAME) %>% 
+  mutate(
+    song_length_v2 = ntile(OG.DURATION_MIN, 7),
+    tempo_v2 = ntile(OG.TEMPO, 7),
+    energy_v2 = ntile(OG.ENERGY, 7),
+    valence_v2 = ntile(OG.VALENCE, 7),
+    loudness_v2 = ntile(OG.LOUDNESS, 7),
+    speechiness_v2 = ntile(OG.SPEECHINESS, 7),
+    acousticness_v2 = ntile(OG.ACOUSTICNESS, 7),
+    instrumentalness_v1 = ntile(OG.INSTRUMENTALNESS, 7)) %>% 
+  select(1:4,15:22,everything())
+
+dat_axford <- dat_axford_all %>% 
+  left_join(dat_axford_album) %>% 
+  select(1:4, contains("OG"), contains("v1"), contains("v2"))
+
+```
+
+## Polished Data
+
+```{r POLISHED DATA, message=FALSE, warning=FALSE}
+
+dat_axford %>% 
+  datatable()
+
+```
+
+# Statistical Summaries
+
+
+## All Music
+
+```{r SUMMARY HIGH, message=FALSE, warning=FALSE}
+
+dat_axford_all %>% 
+  select(1:4, contains("OG")) %>% 
+  summarise_if(is.numeric, mean, na.rm = TRUE) %>% 
+  tabledata()
+
+```
+
+
+## By Album
+
+```{r SUMMARY ALBUM, message=FALSE, warning=FALSE}
+
+dat_axford_all %>% 
+  select(1:4, contains("OG")) %>% 
+  summarise_if(is.numeric, mean, na.rm = TRUE) %>% 
+  tabledata()
+
+```
+
+
+
+
+```{r}
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
