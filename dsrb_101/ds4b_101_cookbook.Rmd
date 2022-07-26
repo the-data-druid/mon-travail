@@ -1,0 +1,1611 @@
+---
+title: "***Enchiridion::**DS4B_101()*"
+subtitle: "*a **DATA DRUID** Class Walkthrough*"
+author: "Jake Weber"
+output:
+  html_document:
+    theme: 
+      bootswatch: "vapor"
+      version: 5
+    highlight: kate
+    toc: true
+    toc_float:
+      collapsed: false
+      smooth_scroll: true
+    toc_depth: 4
+    code_folding: hide
+    number_sections: true
+---
+
+```{r setup, include = FALSE}
+
+knitr::opts_chunk$set(echo = TRUE)
+
+```
+
+# Data Import
+
+## Initiating Packages
+
+```{r Installing Packages, eval=FALSE, include=FALSE}
+
+pkgs_cran <- c(
+    # File System
+    "fs",         # working with the file system
+    
+    # Import
+    "readr",     # reading excel files
+    "writexl",    # saving data as excel files
+    "odbc",       # connecting to databases
+    "RSQLite",    # connecting to SQLite databases
+    
+    # Tidy, Transform, & Visualize
+    "tidyverse",  # dplyr, ggplot2, tibble, tidyr, readr, purrr, stringr, forcats
+    "lubridate",  # working with dates and times
+    "tidyquant",  # used mainly for the ggplot plotting theme
+    
+    # Model
+    "tidymodels", # installs broom, infer, recipes, rsample, & yardstick
+    "umap",       # used for visualizing clusters
+    
+    # Other
+    "devtools"    # used to install non-CRAN packages
+)
+
+#install.packages("fs")       # Install single package
+#install.packages(pkgs_cran)  # Install many packages
+
+```
+
+```{r Inititating Packages, message=FALSE, warning=FALSE}
+
+library(tidyverse)
+library(readxl)
+library(writexl)
+library(readr)
+library(lubridate)
+library(tidyquant)
+
+```
+
+## Reading the Data
+
+```{r Reading in the Data}
+
+# Set Up
+
+options(scipen = 100)
+
+getwd()
+
+# DATA WRANGLING OVERVIEW ----
+
+bikes_tbl <- read_excel("00_data/bike_sales/data_raw/bikes.xlsx")
+orderlines_tbl <- read_excel("00_data/bike_sales/data_raw/orderlines.xlsx")
+bike_orderlines_tbl <- read_rds("00_data/bike_sales/data_wrangled/bike_orderlines.rds")
+bikeshops_tbl <- read_excel("00_data/bike_sales/data_raw/bikeshops.xlsx")
+#orderlines_tbl <- read_excel("00_data/bike_sales/data_raw/orderlines.xlsx")
+
+```
+
+## Glimpses of the Data {tabset.}
+
+Glimpse gives a helpful overview showing the column names, data type, and the head of the data.
+
+### Bikes
+
+```{r Glimpse of Bikes}
+
+bikes_tbl %>% glimpse()
+
+```
+
+### Orderlines
+
+```{r Glimpse of Orderlines}
+
+orderlines_tbl %>% glimpse()
+
+```
+
+### Bike Orderlines
+
+```{r Glimpse of Bike Orderlines}
+
+bike_orderlines_tbl %>% glimpse()
+
+```
+
+### Bike Shops
+
+```{r Glimpse of Bikeshops}
+
+bikeshops_tbl %>% glimpse()
+
+```
+
+# Manipulating the Data
+
+## Selecting via select() 
+
+```{r the Basic Select}
+
+# Basic select
+bike_orderlines_tbl %>%
+    select(order_date, order_id, order_line)
+
+bike_orderlines_tbl %>%
+    select(1:3)
+
+bike_orderlines_tbl %>%
+    select(starts_with("order_"))
+
+```
+
+```{r Reducing the Columns Selected}
+
+# Reduce columns
+
+bike_orderlines_tbl %>%
+    select(order_date, total_price, category_1, category_2)
+
+bike_orderlines_tbl %>% 
+    select(-state)
+
+```
+
+```{r Rearranging Columns}
+
+# Rearange columns
+
+bike_orderlines_tbl %>%
+    select(bikeshop_name:state, everything())
+
+```
+
+```{r}
+
+# pull() extracts a single column
+
+bike_orderlines_tbl %>%
+    # select(total_price) %>%
+    pull(total_price) %>%
+    mean()
+
+#bike_orderlines_tbl %>% 
+#    pull(model)
+
+```
+
+```{r}
+
+# select_if
+
+#?select_if
+
+bike_orderlines_tbl %>%
+    select_if(is.character) 
+
+bike_orderlines_tbl %>%
+    select_if(~ is.numeric(.))
+
+bike_orderlines_tbl %>%
+    select_if(~ !is.numeric(.))
+
+```
+
+## Sorting via arrange() 
+
+```{r Data Arranged by Descending Price}
+
+bikes_tbl %>%
+    select(model, price) %>%
+    arrange(desc(price)) %>%
+    View()
+
+```
+
+## Filtering via filter() 
+
+### Filter via formula 
+
+```{r Formula Filtering}
+
+bikes_tbl %>%
+    select(model, price) %>%
+    filter(price > mean(price))
+
+bikes_tbl %>%
+    select(model, price) %>%
+    filter((price > 5000) | (price < 1000)) %>%
+    arrange(desc(price)) %>%
+    View()
+
+bikes_tbl %>%
+    select(model, price) %>%
+    filter(price > 6000,
+           model %>% str_detect("Supersix"))
+
+# Filtering One or More Conditions Exactly Using == and %in%
+bike_orderlines_tbl %>%
+    filter(category_2 %in% c("Over Mountain", "Trail", "Endurance Road"))
+
+bike_orderlines_tbl %>%
+    filter(category_2 == "Over Mountain")
+
+bike_orderlines_tbl %>%
+    filter(category_2 != "Over Mountain")
+
+bike_orderlines_tbl %>%
+    filter(!(category_2 %in% c("Over Mountain", "Trail", "Endurance Road")))
+
+```
+
+
+### Filtering via slice()
+
+```{r Slicing the Data}
+
+bikes_tbl %>%
+    arrange(desc(price)) %>%
+    slice(1:5)
+
+bikes_tbl %>%
+    arrange(price) %>%
+    slice(1:5)
+
+bikes_tbl %>%
+    arrange(desc(price)) %>%
+    slice((nrow(.)-4):nrow(.))
+
+bikes_tbl %>%
+    arrange(desc(price)) %>%
+    slice((93):97)
+
+```
+
+
+### Unique via distinct()
+
+```{r Unique Values}
+
+bike_orderlines_tbl %>%
+    distinct(category_1)
+
+bike_orderlines_tbl %>%
+    distinct(category_1, category_2)
+
+bike_orderlines_tbl %>%
+    distinct(bikeshop_name, city, state)
+
+```
+
+## Creating via mutate() 
+
+```{r}
+
+# Adding column
+bike_orderlines_prices <- bike_orderlines_tbl %>%
+    select(order_date, model, quantity, price) %>%
+    mutate(total_price = quantity * price)
+
+bike_orderlines_prices
+
+# Overwrite Column
+bike_orderlines_prices %>%
+    mutate(total_price = log(total_price)) 
+
+# Transformations
+bike_orderlines_prices %>%
+    mutate(total_price_log = log(total_price)) %>%
+    mutate(total_price_sqrt = total_price^0.5)
+
+# Adding Flag
+bike_orderlines_prices %>%
+    mutate(is_supersix = model %>% str_to_lower() %>%
+               str_detect("supersix")) %>%
+    filter(is_supersix)
+
+```
+
+### Bins via ntile()
+
+```{r Binning with ntile()}
+
+bike_orderlines_prices %>%
+    mutate(total_price_binned = ntile(total_price, 3)) %>% select(total_price_binned,everything())
+
+```
+
+## Flexibility via case_when()  
+
+```{r case_when for flexibility}
+
+# case_when() - more flexible binning
+
+# Numeric to Categorical
+bike_orderlines_prices %>%
+    mutate(total_price_binned = ntile(total_price, 3)) %>%
+    mutate(total_price_binned2 = case_when(
+        total_price > quantile(total_price, 0.75) ~ "High",
+        total_price > quantile(total_price, 0.25) ~ "Medium",
+        TRUE ~ "Low"
+    )) %>% select(total_price_binned2,total_price_binned,everything())
+
+# Text to Categorical
+bike_orderlines_prices %>%
+    mutate(bike_type = case_when(
+        model %>% str_to_lower() %>% str_detect("supersix") ~ "Supersix",
+        model %>% str_to_lower() %>% str_detect("jekyll") ~ "Jekyll",
+        TRUE ~ "Not Supersix or Jekyll"
+    )) %>% select(bike_type, everything())
+
+```
+
+
+# Grouping & Summarizing
+
+```{r}
+
+# Basics 
+bike_orderlines_tbl %>%
+    summarise(
+        revenue = sum(total_price)
+    )
+
+bike_orderlines_tbl %>%
+    group_by(category_1) %>%
+    summarise(revenue = sum(total_price))
+
+bike_orderlines_tbl %>%
+    group_by(category_1, category_2) %>%
+    summarise(revenue = sum(total_price)) %>%
+    ungroup() %>%
+    arrange(desc(revenue))
+
+bike_orderlines_tbl %>%
+    group_by(category_1, category_2, frame_material) %>%
+    summarise(revenue = sum(total_price)) %>%
+    ungroup() %>%
+    arrange(desc(revenue))
+
+```
+
+## Summary Functions
+
+```{r Summary Functions}
+
+bike_orderlines_tbl %>%
+    group_by(category_1, category_2) %>%
+    summarize(
+        count = n(),
+        avg   = mean(total_price),
+        med   = median(total_price),
+        sd    = sd(total_price),
+        min   = min(total_price),
+        max   = max(total_price)
+    ) %>%
+    ungroup() %>%
+    arrange(desc(count))
+
+```
+
+## Detecting NAs
+
+```{r Summarize all}
+
+# summarize_all() - detect missing values
+
+bike_orderlines_missing <- bike_orderlines_tbl %>%
+    mutate(total_price = c(rep(NA, 4), total_price[5:nrow(.)]))
+
+bike_orderlines_missing %>%
+    summarise_all(~ sum(is.na(.)))
+
+bike_orderlines_missing %>%
+    summarise_all(~ sum(is.na(.)) / length(.))
+
+bike_orderlines_missing %>%
+    filter(!is.na(total_price))
+
+```
+
+# rename() and set_names()
+
+## rename: One at a time
+
+```{r rename()}
+
+bikeshop_revenue_tbl <- bike_orderlines_tbl %>%
+    select(bikeshop_name, category_1, total_price) %>%
+    
+    group_by(bikeshop_name, category_1) %>%
+    summarize(sales = sum(total_price)) %>%
+    ungroup() %>%
+    
+    arrange(desc(sales))
+
+bikeshop_revenue_tbl %>%
+    rename(
+        `Bikeshop Name` = bikeshop_name,
+        `Primary Category` = category_1,
+        Sales = sales
+    )
+
+```
+
+
+## set_names: All at once
+
+```{r set_names()}
+
+bikeshop_revenue_tbl %>%
+    set_names(c("Bikeshop Name", "Primary Category", "Sales"))
+
+bikeshop_revenue_tbl %>%
+    set_names(names(.) %>% str_replace("_", " ") %>% str_to_title())
+
+
+```
+
+# Pivoting Data
+
+## spread(): Long to Wide
+
+```{r}
+bikeshop_revenue_formatted_tbl <- bikeshop_revenue_tbl %>%
+    
+    spread(key = category_1, value = sales) %>%
+    arrange(desc(Mountain)) %>%
+    rename(`Bikeshop Name` = bikeshop_name) %>%
+    mutate(
+        Mountain = scales::dollar(Mountain),
+        Road     = scales::dollar(Road)
+    )
+
+bikeshop_revenue_formatted_tbl
+
+```
+
+
+## gather(): Wide to Long
+
+```{r}
+bikeshop_revenue_formatted_tbl %>%
+    gather(key = "category_1", value = "sales", Mountain, Road) %>%
+    mutate(sales = sales %>% str_remove_all("\\$|,") %>% as.double()) %>%
+    arrange(desc(sales))
+```
+
+
+# Joining Data
+
+```{r}
+#?left_join
+
+orderlines_tbl %>%
+    left_join(y = bikes_tbl, by = c("product.id" = "bike.id"))
+```
+
+
+# Column binding
+
+## bind_cols()
+
+```{r}
+bike_orderlines_tbl %>%
+    select(-contains("order")) %>%
+    bind_cols(bike_orderlines_tbl %>% select(order_id))
+```
+
+
+## bind_rows()
+
+```{r}
+train_tbl <- bike_orderlines_tbl %>%
+    slice(1:(nrow(.)/2))
+
+train_tbl
+
+test_tbl <- bike_orderlines_tbl %>%
+    slice((nrow(.)/2 + 1):nrow(.))
+
+test_tbl
+
+train_tbl %>%
+    bind_rows(test_tbl)
+
+```
+
+
+# Separate & Unite
+
+```{r}
+bike_orderlines_tbl %>%
+    select(order_date) %>%
+    mutate(order_date = as.character(order_date)) %>%
+    
+    # separate
+    separate(col = order_date, into = c("year", "month", "day"), sep = "-", remove = FALSE) %>%
+    
+    mutate(
+        year  = as.numeric(year),
+        month = as.numeric(month),
+        day   = as.numeric(day)
+    ) %>%
+    
+    # unite
+    unite(order_date_united, year, month, day, sep = "-", remove = FALSE) %>%
+    mutate(order_date_united = as.Date(order_date_united))
+```
+
+# lubridate()
+
+```{r}
+# 1.0 Date & Lubridate Basics ----
+
+# 1.1 Character vs Date/Datetime
+
+order_date_tbl <- bike_orderlines_tbl %>%
+    select(order_date)
+
+order_date_tbl %>%
+    pull(order_date) %>%
+    class()
+
+
+# 1.2 Date Classes
+
+order_date_tbl %>%
+    mutate(order_date_chr = as.character(order_date)) %>%
+    mutate(order_date_chr2 = order_date_chr %>% str_c(" 00:00:00")) %>%
+    
+    mutate(order_date_date = order_date_chr %>% ymd()) %>%
+    mutate(order_date_dttm = order_date_chr2 %>% ymd_hms())
+
+
+
+
+
+# 1.3 Lubridate Functions
+
+# Conversion
+
+"06/01/18" %>% mdy() %>% class()
+
+"06/01/18 12:30:15" %>% mdy_hms() %>% class()
+
+"January 1, 1985" %>% mdy()
+
+
+
+# Extractor
+
+"2011-01-01" %>% ymd() %>% year()
+
+"2011-01-01" %>% ymd() %>% month(label = TRUE, abbr = FALSE) 
+
+"2011-01-01" %>% ymd() %>% wday(label = TRUE, abbr = FALSE)
+
+"2011-01-01" %>% ymd() %>% day()
+
+# Helpers
+
+now()
+
+today()
+
+# Periods & Durations - Add/subract time to/from a date
+
+today() + days(12)
+
+today() + ddays(12)
+
+today() + years(4)  # Period
+
+today() + dyears(4) # Duration
+
+# Intervals - Calculate time-based distance 
+
+i <- interval(today(), today() + ddays(12)) 
+
+i / ddays(1) # interval / ddays = how many days in interval
+
+i / dminutes(1) # interval / dminutes = how many minutes in the interval
+
+order_date_tbl %>%
+    mutate(today = today()) %>%
+    mutate(diff_days = interval(order_date, today) / ddays(1))
+
+
+# 2.0 Time-Based Data Grouping ----
+
+bike_sales_y_tbl <- bike_orderlines_tbl %>%
+    select(order_date, total_price) %>%
+    
+    # lubridate
+    mutate(order_date = ymd(order_date)) %>%
+    mutate(year = year(order_date)) %>%
+    
+    # group_by + summarize
+    group_by(year) %>%
+    summarize(sales = sum(total_price)) %>%
+    ungroup()
+
+bike_sales_y_tbl
+
+bike_sales_m_tbl <- bike_orderlines_tbl %>%
+    select(order_date, total_price) %>%
+    
+    # lubridate
+    mutate(order_date = ymd(order_date)) %>%
+    mutate(
+        year  = year(order_date),
+        month = month(order_date, label = TRUE, abbr = TRUE)
+    ) %>%
+    
+    # groupby + summarize
+    group_by(year, month) %>%
+    summarize(sales = sum(total_price)) %>%
+    ungroup()
+
+bike_sales_m_tbl
+
+# Floor Date
+
+bike_orderlines_tbl %>%
+    select(order_date, total_price) %>%
+    
+    # lubridate
+    mutate(order_date = ymd(order_date)) %>%
+    mutate(year_month = floor_date(order_date, unit = "month")) %>%
+    
+    # group_by + summarize
+    group_by(year_month) %>%
+    summarize(sales = sum(total_price))
+
+# 3.0 Measuring Change ----
+
+# 3.1 Difference from most recent observation ----
+
+bike_sales_y_tbl %>%
+    mutate(sales_lag_1 = lag(sales, n = 1)) %>%
+    
+    # Handle NA
+    mutate(sales_lag_1 = case_when(
+        is.na(sales_lag_1) ~ sales,
+        TRUE ~ sales_lag_1
+    )) %>%
+    
+    # Diff's & Pct Diffs
+    mutate(diff_1 = sales - sales_lag_1) %>%
+    mutate(pct_diff_1 = diff_1 / sales_lag_1) %>%
+    mutate(pct_diff_1_chr = scales::percent(pct_diff_1))
+
+calculate_pct_diff <- function(data) {
+    
+    data %>% 
+        mutate(sales_lag_1 = lag(sales, n = 1)) %>%
+        
+        # Handle NA
+        mutate(sales_lag_1 = case_when(
+            is.na(sales_lag_1) ~ sales,
+            TRUE ~ sales_lag_1
+        )) %>%
+        
+        # Diff's & Pct Diffs
+        mutate(diff_1 = sales - sales_lag_1) %>%
+        mutate(pct_diff_1 = diff_1 / sales_lag_1) %>%
+        mutate(pct_diff_1_chr = scales::percent(pct_diff_1))
+    
+}
+
+bike_sales_m_tbl %>%
+    calculate_pct_diff()
+
+
+
+# 3.2 Difference from first observation ----
+
+bike_sales_y_tbl %>%
+    mutate(sales_2011 = first(sales)) %>%
+    mutate(diff_2011  = sales - sales_2011) %>%
+    mutate(pct_diff_2011 = diff_2011 / sales_2011) %>%
+    mutate(pct_diff_2011_chr = scales::percent(pct_diff_2011))
+
+bike_sales_m_tbl %>%
+    
+    group_by(year) %>%
+    
+    mutate(sales_jan = first(sales)) %>% 
+    mutate(
+        diff_jan         = sales - sales_jan,
+        pct_diff_jan     = diff_jan / sales_jan,
+        pct_diff_jan_chr = scales::percent(pct_diff_jan)
+    ) 
+
+
+
+# 4.0 Cumulative Calculations ----
+
+bike_sales_y_tbl %>%
+    mutate(cumulative_sales = cumsum(sales)) %>%
+    mutate(cumulative_sales_pct = cumulative_sales / sum(sales)) %>%
+    mutate(cumulative_sales_pct_chr = cumulative_sales_pct %>% scales::percent())
+
+bike_sales_m_tbl %>%
+    
+    group_by(year) %>%
+    
+    mutate(cumulative_sales = cumsum(sales)) %>%
+    mutate(cumulative_sales_pct = cumulative_sales / sum(sales)) %>%
+    mutate(cumulative_sales_pct_chr = scales::percent(cumulative_sales_pct))
+
+
+# 5.0 Rolling Calculations ----
+
+bike_sales_m_tbl %>%
+    
+    mutate(roll_mean_3 = rollmean(sales, k = 3, na.pad = TRUE, align = "right", fill = NA)) %>%
+    
+    mutate(roll_mean_6 = rollmean(sales, k = 6, na.pad = TRUE, align = "right", fill = NA))
+
+
+# 6.0 Filtering Date Ranges ---- 
+
+bike_orderlines_tbl %>%
+    
+    mutate(order_date = ymd(order_date)) %>%
+    
+    filter(order_date %>% between(left = ymd("2012-01-01"), right = ymd("2013-12-31"))) 
+
+
+bike_orderlines_tbl %>%
+    
+    mutate(order_date = ymd(order_date)) %>%
+    
+    filter(year(order_date) %in% c(2012, 2013))
+```
+
+
+# stringr()
+
+```{r}
+
+# TEXT MANIPULATION ----
+
+# 1.0 Basics ----
+
+# 1.1 Detection: Used with filter() ----
+
+# Vector
+c("Supersix Evo Black Inc.", "Supersix Evo Hi-Mod Team") %>%
+    str_detect(pattern = "Supersix")
+
+# Tibble
+bikes_tbl %>%
+    select(model) %>%
+    mutate(supersix = model %>% str_detect("Supersix") %>% as.numeric()) %>% 
+    mutate(black    = model %>% str_detect("Black") %>% as.numeric())
+
+
+# 1.2 Case & Concatenation ----
+
+
+# Case
+bikeshop_name <- "Ithaca Mountain Climbers"
+
+str_to_upper(bikeshop_name)
+str_to_lower(bikeshop_name)
+str_to_title(bikeshop_name)
+
+# Concatenation
+
+# Vector
+order_id <- 1
+order_line <- 1
+
+str_c("Order Line: ", order_id, ".", order_line, 
+      " sent to Customer: ", bikeshop_name,
+      sep = "")
+
+str_glue("Order Line: {order_id}.{order_line} sent to Customer: {str_to_upper(bikeshop_name)}")
+
+
+# Tibble
+bike_orderlines_tbl %>%
+    select(bikeshop_name, order_id, order_line) %>%
+    mutate(purchase_statement = str_glue(
+        "Order Line: {order_id}.{order_line} sent to Customer: {str_to_upper(bikeshop_name)}"
+    ) %>% as.character())
+
+# 1.3 Separating Text: See tidyr::separate() ----
+
+# Vector
+c("Road - Elite Road - Carbon", "Road - Elite Road") %>% str_split(pattern = " - ", simplify = TRUE)
+
+# Tibble
+bikes_tbl %>%
+    select(description) %>%
+    separate(col    = description, 
+             into   = c("category_1", "category_2", "frame_material"), 
+             sep    = " - ",
+             remove = FALSE)
+
+
+# 1.4 Trimming Text ----
+
+" text with space   " %>% str_trim(side = "left")
+
+# 1.5 Replacement: Used with mutate() [and optionally case_when()] ----
+
+# Vector
+c("CAAD12", "CAAD", "CAAD8") %>% str_replace(pattern = "[0-9]", replacement = "")
+
+c("CAAD12", "CAAD", "CAAD8") %>% str_replace_all(pattern = "[0-9]", replacement = "")
+
+# Tibble
+bikes_tbl %>%
+    select(model) %>%
+    mutate(model_num_removed = model %>% str_replace_all("[0-9]", "") %>% str_trim()) 
+
+
+
+# 1.6 Formatting Numbers ----
+
+# values
+value <- 1e6
+
+(value / 1e6) %>% scales::number(prefix = "$", suffix = "M")
+
+value %>% scales::number(prefix = "$", big.mark = ",")
+
+value %>% scales::dollar(scale = 1/1e6, suffix = "M")
+
+# percents
+pct <- 0.15
+
+pct %>% scales::number(scale = 100, suffix = "%")
+
+pct %>% scales::percent()
+
+
+# 1.7 Formatting Column Names ----
+
+# Replacing text in column names
+
+bike_orderlines_tbl %>%
+    set_names(names(.) %>% str_replace("_", ".") %>% str_to_upper())
+
+# Appending text to column names
+bike_orderlines_tbl %>%
+    set_names(str_glue("{names(.)}_bike"))
+
+# Appending text to specific column names
+bike_orderlines_colnames_tbl <- bike_orderlines_tbl %>%
+    rename_at(.vars = vars(model:frame_material), 
+              .funs = ~ str_c("prod_", .)) %>%
+    rename_at(vars(bikeshop_name:state),
+              ~ str_c("cust_", .)) 
+
+bike_orderlines_colnames_tbl %>%
+    select(contains("cust_"), total_price)
+
+# 2.0 Feature Engineering with Text -----
+# Investigating "model" and extracting well-formatted features
+
+bikes_tbl %>%
+    
+    select(model) %>%
+    
+    # Fix typo
+    mutate(model = case_when(
+        model == "CAAD Disc Ultegra" ~ "CAAD12 Disc Ultegra",
+        model == "Syapse Carbon Tiagra" ~ "Synapse Carbon Tiagra",
+        model == "Supersix Evo Hi-Mod Utegra" ~ "Supersix Evo Hi-Mod Ultegra",
+        TRUE ~ model
+    )) %>%
+    
+    # separate using spaces
+    separate(col     = model, 
+             into    = str_c("model_", 1:7), 
+             sep     = " ", 
+             remove  = FALSE, 
+             fill    = "right") %>%
+    
+    # creating a "base" feature
+    mutate(model_base = case_when(
+        
+        # Fix Supersix Evo
+        str_detect(str_to_lower(model_1), "supersix") ~ str_c(model_1, model_2, sep = " "),
+        
+        # Fix Fat CAAD bikes
+        str_detect(str_to_lower(model_1), "fat") ~ str_c(model_1, model_2, sep = " "),
+        
+        # Fix Beast of the East
+        str_detect(str_to_lower(model_1), "beast") ~ str_c(model_1, model_2, model_3, model_4, sep = " "),
+        
+        # Fix Bad Habit
+        str_detect(str_to_lower(model_1), "bad") ~ str_c(model_1, model_2, sep = " "),
+        
+        # Fix Scalpel 29
+        str_detect(str_to_lower(model_2), "29") ~ str_c(model_1, model_2, sep = " "),
+        
+        # catch all
+        TRUE ~ model_1)
+    ) %>%
+    
+    # Get "tier" feature
+    mutate(model_tier = model %>% str_replace(model_base, replacement = "") %>% str_trim()) %>%
+    
+    # Remove unnecessary columns
+    select(-matches("[0-9]")) %>%
+    
+    # Create Flags
+    mutate(
+        black     = model_tier %>% str_to_lower() %>% str_detect("black") %>% as.numeric(),
+        hi_mod    = model_tier %>% str_to_lower() %>% str_detect("hi-mod") %>% as.numeric(),
+        team      = model_tier %>% str_to_lower() %>% str_detect("team") %>% as.numeric(),
+        red       = model_tier %>% str_to_lower() %>% str_detect("red") %>% as.numeric(),
+        ultegra   = model_tier %>% str_to_lower() %>% str_detect("ultegra") %>% as.numeric(),
+        dura_ace  = model_tier %>% str_to_lower() %>% str_detect("dura ace") %>% as.numeric(),
+        disc      = model_tier %>% str_to_lower() %>% str_detect("disc") %>% as.numeric()
+    ) %>%
+    
+    View()
+
+
+```
+
+# forcats()
+
+```{r}
+# 1.0 Factor Basics ----
+
+# What is a Factor?
+# A way of managing categorical data
+
+# Why do we want factors? 
+# 1. Can group numeric values into bin (think price = low, medium, high)
+# 2. Can reorder categories for visualization (fct_reorder)
+# 3. Can manipulate categories much eaiser (fct_lump)
+# 4. Machine learning and modeling algorithms may require factor data type for categorical data. 
+
+# 2.0 Motivating Example -----
+
+# Manipulation
+sales_by_cat_2_tbl <- bike_orderlines_tbl %>%
+    
+    select(category_2, total_price) %>%
+    
+    group_by(category_2) %>%
+    summarize(sales = sum(total_price)) %>%
+    ungroup() %>%
+    
+    arrange(desc(sales)) %>%
+    
+    mutate(category_2 = category_2 %>% as_factor() %>% fct_rev())
+
+# Plotting
+sales_by_cat_2_tbl %>%
+    ggplot(aes(x = sales, y = category_2)) +
+    geom_point(size = 5, color = "#2c3e50") +
+    labs(title = "Sales By Category 2") +
+    scale_x_continuous(labels = scales::dollar_format()) +
+    theme_tq() +
+    expand_limits(x = 0)
+
+plot_sales <- function(data) {
+    data %>%
+        ggplot(aes(x = sales, y = category_2)) +
+        geom_point(size = 5, color = "#2c3e50") +
+        labs(title = "Sales By Category 2") +
+        scale_x_continuous(labels = scales::dollar_format()) +
+        theme_tq() +
+        expand_limits(x = 0)
+}
+
+sales_by_cat_2_tbl %>%
+    plot_sales()
+
+
+
+# 3.0 Forcats Basics ----
+
+
+# 3.1 Inspecting Factors ----
+
+# Vector
+sales_by_cat_2_tbl %>% pull(category_2) %>% levels()
+
+sales_by_cat_2_tbl %>% pull(category_2) %>% as.numeric()
+
+# Tibble
+
+sales_by_cat_2_tbl %>%
+    mutate(category_2 = category_2 %>% fct_rev() %>% fct_rev()) %>%
+    mutate(
+        label = category_2 %>% as.character(),
+        value = category_2 %>% as.numeric()
+    )
+
+# 3.2 Creating Factors: as_factor() vs as.factor() ----
+
+sales_by_cat_2_tbl %>%
+    mutate(
+        category_2           = as.character(category_2),
+        category_2_as_factor = as_factor(category_2) %>% as.numeric(),
+        category_2_as.factor = as.factor(category_2) %>% as.numeric()
+    )
+
+
+
+# 3.3 Reordering Factors: fct_reorder() and fct_rev() ----
+
+sales_by_cat_2_tbl %>%
+    arrange(desc(sales)) %>%
+    mutate(sales_negative = -sales) %>%
+    mutate(
+        category_2 = category_2 %>% fct_reorder(sales_negative),
+        values     = category_2 %>% as.numeric()) %>%
+    
+    plot_sales()
+
+
+
+
+
+# 3.4 Time-Based Reordering: fct_reorder2() ----
+
+
+sales_by_cat_2_q_tbl <- bike_orderlines_tbl %>%
+    
+    mutate(order_date = order_date %>% floor_date("quarter") %>% ymd()) %>%
+    
+    group_by(category_2, order_date) %>%
+    summarise(sales = sum(total_price)) %>%
+    ungroup()
+
+sales_by_cat_2_q_tbl
+
+
+sales_by_cat_2_q_tbl %>%
+    
+    mutate(category_2 = category_2 %>% fct_reorder2(order_date, sales)) %>%
+    
+    ggplot(aes(x = order_date, y = sales, color = category_2)) +
+    geom_point() +
+    geom_line() +
+    facet_wrap(~ category_2) +
+    
+    theme_tq() +
+    scale_color_tq() +
+    scale_y_continuous(labels = scales::dollar_format(scale = 1e-6, suffix = "M"))
+
+
+# 3.5 Creating "Other" Category - fct_lump() & fct_relevel() ----
+
+sales_by_cat_2_tbl %>%
+    
+    mutate(category_2 = category_2 %>% fct_lump(n = 6, 
+                                                w = sales, 
+                                                other_level = "All Other Bike Categories")) %>%
+    
+    group_by(category_2) %>%
+    summarize(sales = sum(sales)) %>%
+    
+    mutate(category_2 = category_2 %>% fct_relevel("All Other Bike Categories", after = 0)) %>%
+    
+    plot_sales()
+
+```
+
+
+# Visualization
+
+```{r}
+left_join(orderlines_tbl, bikes_tbl, by = c("product.id" = "bike.id"))
+
+bike_orderlines_joined_tbl <- orderlines_tbl %>%
+    left_join(bikes_tbl, by = c("product.id" = "bike.id")) %>%
+    left_join(bikeshops_tbl, by = c("customer.id" = "bikeshop.id"))
+
+bike_orderlines_joined_tbl
+
+bike_orderlines_joined_tbl %>% glimpse()
+
+# 5.0 Wrangling Data ----
+
+bike_orderlines_wrangled_tbl <- bike_orderlines_joined_tbl %>%
+    
+    # Separate description into category.1, category.2, and frame.material
+    separate(description,
+             into = c("category.1", "category.2", "frame.material"),
+             sep = " - ",
+             remove = TRUE) %>%
+    
+    # Separate location into city and state
+    separate(location,
+             into = c("city", "state"),
+             sep  = ", ",
+             remove = FALSE) %>%
+    
+    # price extended
+    mutate(total.price = price * quantity) %>%
+    
+    # Reorganize
+    select(-location) %>%
+    select(-ends_with(".id")) %>%
+    
+    bind_cols(bike_orderlines_joined_tbl %>% select(order.id)) %>%
+    
+    # Reorder columns
+    select(contains("date"), contains("id"), contains("order"),
+           quantity, price, total.price,
+           everything()) %>%
+    
+    # Renaming columns
+    rename(order_date = order.date) %>%
+    set_names(names(.) %>% str_replace_all("\\.", "_")) 
+
+bike_orderlines_wrangled_tbl %>% glimpse()
+
+
+
+# 6.0 Business Insights ----
+
+
+# 6.1 Sales by Year ----
+
+# Step 1 - Manipulate
+
+sales_by_year_tbl <- bike_orderlines_wrangled_tbl %>%
+    
+    # Selecting columns to focus on and adding a year column
+    select(order_date, total_price) %>%
+    mutate(year = year(order_date)) %>%
+    
+    # Grouping by year, and summarizing sales
+    group_by(year) %>%
+    summarize(sales = sum(total_price)) %>%
+    ungroup() %>%
+    
+    # $ Format Text
+    mutate(sales_text = scales::dollar(sales))
+    
+sales_by_year_tbl
+
+
+# Step 2 - Visualize
+
+sales_by_year_tbl %>%
+    
+    # Setup canvas with year (x-axis) and sales (y-axis)
+    ggplot(aes(x = year, y = sales)) +
+    
+    # Geometries
+    geom_col(fill = "#2c3e50") +
+    geom_label(aes(label = sales_text)) +
+    geom_smooth(method = "lm", se = FALSE) +
+    
+    # Formatting
+    theme_tq() +
+    scale_y_continuous(labels = scales::dollar) +
+    labs(
+        title = "Revenue by Year",
+        subtitle = "Upward trend",
+        x = "",
+        y = "Revenue"
+    )
+
+# 6.2 Sales by Year and Category 2 ----
+
+
+# Step 1 - Manipulate
+
+sales_by_year_cat_2_tbl <- bike_orderlines_wrangled_tbl %>%
+    
+    # Selecting columns and add a year
+    select(order_date, total_price, category_2) %>%
+    mutate(year = year(order_date)) %>%
+    
+    # Groupby and Summarize year and category 2
+    group_by(year, category_2) %>%
+    summarise(sales = sum(total_price)) %>%
+    ungroup() %>%
+    
+    # Format $ Text
+    mutate(sales_text = scales::dollar(sales))
+
+
+sales_by_year_cat_2_tbl
+
+# Step 2 - Visualize
+
+sales_by_year_cat_2_tbl %>%
+    
+    # Set up x, y, fill 
+    ggplot(aes(x = year, y = sales, fill = category_2)) +
+    
+    # Geometries
+    geom_col() +
+    geom_smooth(method = "lm", se = FALSE) +
+    
+    # Facet
+    facet_wrap(~ category_2, ncol = 3, scales = "free_y") +
+    
+    # Formatting
+    theme_tq() +
+    scale_fill_tq() +
+    scale_y_continuous(labels = scales::dollar) +
+    labs(
+        title = "Revenue by Year and Category 2",
+        subtitle = "Each product category has an upward trend",
+        x = "",
+        y = "Revenue",
+        fill = "Product Secondary Category"
+    )
+
+
+# 7.0 Writing Files ----
+
+fs::dir_create("00_data/bike_sales/data_wrangled_student")
+
+# 7.1 Excel ----
+
+bike_orderlines_wrangled_tbl %>%
+    write_xlsx("00_data/bike_sales/data_wrangled_student/bike_orderlines.xlsx")
+
+
+# 7.2 CSV ----
+
+bike_orderlines_wrangled_tbl %>%
+    write_csv("00_data/bike_sales/data_wrangled_student/bike_orderlines.csv")
+
+
+# 7.3 RDS ----
+
+bike_orderlines_wrangled_tbl %>%
+    write_rds("00_data/bike_sales/data_wrangled_student/bike_orderlines.rds")
+
+
+```
+
+## Formating
+
+```{r}
+
+# Data Manipulation
+
+sales_by_year_category_2_tbl <- bike_orderlines_tbl %>%
+    select(order_date, category_2, total_price) %>%
+    
+    mutate(order_date = ymd(order_date)) %>%
+    mutate(year = year(order_date)) %>%
+    
+    group_by(category_2, year) %>%
+    summarize(revenue = sum(total_price)) %>%
+    ungroup() %>%
+    
+    mutate(category_2 = fct_reorder2(category_2, year, revenue))
+
+sales_by_year_category_2_tbl
+
+sales_by_year_category_2_tbl %>%
+    mutate(category_2_num = as.numeric(category_2)) %>%
+    arrange(category_2_num)
+
+# 1.0 Working with Colors ----
+
+# 1.1 Color Conversion ----
+
+# Named Colors
+colors()
+
+sales_by_year_category_2_tbl %>%
+    
+    ggplot(aes(year, revenue)) +
+    
+    geom_col(fill = viridisLite::viridis(n = 20)[10])
+
+# To RGB
+col2rgb("slateblue")
+
+col2rgb("#2C3E50")
+
+# To HEX
+rgb(44, 62, 80, maxColorValue = 255)
+ 
+
+# 1.2 Color Palettes ----
+
+# tidyquant
+tidyquant::palette_light()
+
+palette_light()[2] %>% col2rgb()
+
+# Brewer
+RColorBrewer::display.brewer.all()
+RColorBrewer::brewer.pal.info
+RColorBrewer::brewer.pal(n = 8, name = "Blues")
+
+# Viridis
+viridisLite::viridis(n = 20)
+
+
+
+# 2.0 Aesthetic Mappings ----
+
+# 2.1 Color  -----
+# - Used with line and points, Outlines of rectangular objects
+sales_by_year_category_2_tbl %>%
+    
+    ggplot(aes(year, revenue, color = category_2)) +
+    geom_line(size = 1) +
+    geom_point(color = "dodgerblue", size = 5)
+
+
+# 2.2 Fill  -----
+# - Used with fill of rectangular objects 
+
+sales_by_year_category_2_tbl %>%
+    
+    ggplot(aes(year, revenue)) +
+    geom_col(aes(fill = category_2))
+
+# 2.3 Size ----
+# - Used with points
+
+sales_by_year_category_2_tbl %>%
+    
+    ggplot(aes(year, revenue, size = revenue)) +
+    geom_line(aes(color = category_2), size = 1) +
+    geom_point()+
+    facet_wrap(~ category_2)
+
+
+
+# 3.0 Faceting ----
+# - Great way to tease out variation by category
+
+# Goal: Sales annual sales by category 2
+
+sales_by_year_category_2_tbl %>%
+    
+    ggplot(aes(year, revenue, color = category_2)) +
+    geom_line(color = "black") +
+    geom_smooth(method = "lm", se = FALSE) +
+    
+    facet_wrap(~ category_2, ncol = 3, scales = "free_y") +
+    
+    expand_limits(y = 0)
+
+
+# 4.0 Position Adjustments (Stack & Dodge) ----
+
+# Stacked Bars & Side-By-Side Bars
+
+sales_by_year_category_2_tbl %>%
+    
+    ggplot(aes(year, revenue, fill = category_2)) +
+    # geom_col(position = "stack")
+    # geom_col(position = "dodge")
+    geom_col(position = position_dodge(width = 0.9), color = "white")
+
+# Stacked Area
+
+sales_by_year_category_2_tbl %>%
+    
+    ggplot(aes(year, revenue, fill = category_2)) +
+    geom_area(color = "black")
+
+
+
+
+# 5.0 Scales (Colors, Fills, Axis) ----
+
+# 5.1 Plot Starting Points ----
+# - Continuous (e.g. Revenue): Changes color via gradient palette
+# - Categorical (e.g. ): Changes color via discrete palette
+
+# Plot 1: Faceted Plot, Color = Continuous Scale
+g_facet_continuous <- sales_by_year_category_2_tbl %>%
+    
+    ggplot(aes(year, revenue, color = revenue)) +
+    geom_line(size = 1) +
+    geom_point(size = 3) +
+    
+    facet_wrap(~ category_2, scales = "free_y") +
+    expand_limits(y = 0) +
+    
+    theme_minimal()
+
+g_facet_continuous
+    
+
+# Plot 2: Faceted Plot, Color = Discrete Scale
+g_facet_discrete <- sales_by_year_category_2_tbl %>%
+    
+    ggplot(aes(year, revenue, color = category_2)) +
+    geom_line(size = 1) +
+    geom_point(size = 3) +
+    
+    facet_wrap(~ category_2, scales = "free_y") +
+    expand_limits(y = 0) +
+    
+    theme_minimal()
+
+g_facet_discrete
+
+# Plot 3: Stacked Area Plot
+g_area_discrete <- sales_by_year_category_2_tbl %>%
+    
+    ggplot(aes(year, revenue, fill = category_2)) +
+    geom_area(color = "black") +
+    
+    theme_minimal()
+
+g_area_discrete
+
+# 5.2 Scale Colors & Fills ----
+# - Awesome way to show variation by groups (discrete) and by values (continuous)
+
+# Color by Revenue (Continuous Scale)
+
+g_facet_continuous +
+    
+    # scale_color_continuous(
+    #     low   = "black",
+    #     high  = "cornflowerblue" 
+    # )
+    scale_color_viridis_c(direction = 1)
+    
+
+
+# Color by Category 2 (Discrete Scale)
+RColorBrewer::display.brewer.all()
+RColorBrewer::brewer.pal.info
+RColorBrewer::brewer.pal(n = 8, name = "Blues")
+
+g_facet_discrete +
+    scale_color_brewer(palette = "Set3") +
+    theme_dark()
+
+g_facet_discrete +
+    scale_color_tq(theme = "dark") +
+    theme_dark()
+
+g_facet_discrete +
+    scale_color_viridis_d(option = "D") +
+    theme_dark()
+
+
+# Fill by Category 2
+
+g_area_discrete +
+    scale_fill_brewer(palette = "Set3")
+
+g_area_discrete +
+    scale_fill_tq()
+
+g_area_discrete +
+    scale_fill_viridis_d(direction = -1)
+
+
+# 5.3 Axis Scales ----
+
+sales_by_year_category_2_tbl
+
+g_facet_continuous +
+    scale_x_continuous(breaks = seq(2011, 2015, by = 2)) +
+    scale_y_continuous(labels = scales::dollar_format(scale = 1e-6, suffix = "M"))
+
+
+
+# 6.0 Labels ----
+
+g_facet_continuous +
+    
+    scale_x_continuous(breaks = seq(2011, 2015, by = 2)) +
+    scale_y_continuous(labels = scales::dollar_format(scale = 1e-6, suffix = "M")) +
+    
+    geom_smooth(method = "lm", se = FALSE) +
+    
+    scale_color_viridis_c() +
+    theme_dark() +
+    
+    labs(
+        title = "Bike Sales",
+        subtitle = "Sales are trending up",
+        caption = "5-year sales trends\ncomes from our ERP Database",
+        x = "Year",
+        y = "Revenue ($M)",
+        color = "Revenue"
+    )
+
+
+# 7.0 Themes  ----
+
+g_facet_continuous +
+    
+    theme_light() +
+    
+    theme(
+        axis.text.x = element_text(
+            angle = 45, 
+            hjust = 1
+        ),
+        strip.background = element_rect(
+            color = "black",
+            fill  = "cornflowerblue",
+            size  = 1
+        ),
+        strip.text = element_text(
+            face  = "bold",
+            color = "white"
+        )
+    )
+
+
+# 8.0 Putting It All Together ----
+
+# Brewer
+RColorBrewer::display.brewer.all()
+RColorBrewer::brewer.pal.info
+RColorBrewer::brewer.pal(n = 9, name = "Blues")
+
+sales_by_year_category_2_tbl %>%
+    
+    ggplot(aes(year, revenue, fill = category_2)) +
+    
+    geom_area(color = "black") +
+    
+    # Scales
+    scale_fill_viridis_d(direction = 1) +
+    scale_y_continuous(labels = scales::dollar_format()) +
+    
+    # Labels
+    labs(
+        title = "Sales Over Year by Category 2",
+        subtitle = "Sales Trending Upward",
+        x = "",
+        y = "Revenue ($M)",
+        fill = "2nd Category",
+        caption = "Bike sales trends look strong heading into 2016"
+    ) +
+    
+    # Theme
+    theme_light() +
+    theme(
+        title = element_text(face = "bold")
+    )
+
+
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
